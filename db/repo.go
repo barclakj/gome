@@ -9,9 +9,9 @@ import  (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const DB_FILENAME = "gome.db"
-
 var database *sql.DB
+
+const DB_FILENAME = "gome.db"
 
 const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "uuid", "seq", "data", "remote_ts", "ts") VALUES (?, ?, ?, ?, ?, ?);`
 
@@ -71,31 +71,22 @@ func insertLogEntry(le *model.LogEntry) bool {
 	}
 }
 
-func Load(ref  string) *model.Log {
+func Load(ref  string) []model.LogEntry {
 	row, err := database.Query(QUERY_LE_BY_UUID, ref)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer row.Close()
 
-	var headLog *model.Log = nil
-	var prevLog *model.Log = nil
+	var logs []model.LogEntry
 
 	for row.Next() {
-		// log.Printf("Scanning next record\n")
-		gomeLog := model.Log{Next: nil}
-		if headLog == nil {
-			headLog = &gomeLog
-		} else {
-			prevLog.Next = &gomeLog
-		}
+		log.Printf("Scanning next record\n")
 		le := model.LogEntry{}
 		row.Scan(&le.Origin, &le.Uuid, &le.Seq, &le.Data, &le.RemoteTs, &le.Ts)
-		gomeLog.Entry = &le
-		prevLog = &gomeLog
-
+		logs = append(logs, le)
 	}
-	return headLog
+	return logs
 }
 
 func Append(le *model.LogEntry) bool {
@@ -107,14 +98,12 @@ func Append(le *model.LogEntry) bool {
 		return false
 	} else {
 		gl := Load(le.Uuid)
-		for gl != nil && gl.Entry != nil {
-			nextLe := gl.Entry
-			log.Printf("Testing %s %d\n", nextLe.Origin, nextLe.Seq)
-			if nextLe.Origin == le.Origin && nextLe.Seq == le.Seq {
+		for _, tle := range gl {
+			log.Printf("Testing %s %d\n", tle.Origin, tle.Seq)
+			if tle.Origin == le.Origin && tle.Seq == le.Seq {
 				log.Fatal("Existing entry found\n")
 				return false
 			}
-			gl = gl.Next
 		}
 		log.Printf("Appending %s:%d from %s\n", le.Uuid, le.Seq, le.Origin)
 		return insertLogEntry(le)

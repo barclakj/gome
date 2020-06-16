@@ -86,6 +86,7 @@ func Load(ref  string) []model.LogEntry {
 		row.Scan(&le.Origin, &le.Uuid, &le.Seq, &le.Data, &le.RemoteTs, &le.Ts)
 		logs = append(logs, le)
 	}
+	model.Sort(logs)
 	return logs
 }
 

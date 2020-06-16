@@ -8,12 +8,11 @@ import (
 )
 
 func TestAppend(t *testing.T) {
-	le := model.LogEntry{}
-	le.Uuid = "uuid"
-	le.Seq = 1
-	le.RemoteTs = 1
-	le.Ts = 1
-	le.Origin = "origin"
-	assert.Equal(t,true,Append(&le))
+	le := model.NewLogEntry([]byte("simple test"), "origin")
+	log.Printf("UUID: %s SEQ: %d\n", le.Uuid, le.Seq)
+	assert.Equal(t,true,Append(le))
+	le.Update([]byte("my data"), "origin2")
+	log.Printf("UUID: %s SEQ: %d\n", le.Uuid, le.Seq)
+	assert.Equal(t,true,Append(le))
 	log.Printf("Done testing!\n")
 }

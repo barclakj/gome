@@ -1,25 +1,26 @@
 package model
 
 import (
-	"github.com/google/uuid"
-	"log"
-	"time"
 	"encoding/json"
+	"log"
 	"sort"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type LogEntry struct {
-	Data []byte
-	Origin string
-	Seq uint64
-	Uuid string
-	Ts int64
+	Data     []byte
+	Origin   string
+	Seq      uint64
+	Uuid     string
+	Ts       int64
 	RemoteTs int64
 }
 
 type bySeqAndTs []LogEntry
 
-func (a bySeqAndTs) Len() int { return  len(a) }
+func (a bySeqAndTs) Len() int      { return len(a) }
 func (a bySeqAndTs) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a bySeqAndTs) Less(i, j int) bool {
 	if a[i].Seq < a[j].Seq {

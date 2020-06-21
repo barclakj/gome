@@ -5,10 +5,6 @@ import (
 	"encoding/base64"
 )
 
-func Encode(msg LogEntry) []byte {
-	return msg.Data
-}
-
 func Hash(oid string, previousHash string, data []byte) string {
 	hasher := sha256.New()
 

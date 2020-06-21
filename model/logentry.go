@@ -72,6 +72,7 @@ func FromJSON(jsonString []byte) *LogEntry {
 	return &le
 }
 
+/* Sorts an array of log entries by sequence and timestamp */
 func Sort(logs []LogEntry) {
 	sort.Sort(bySeqAndTs(logs))
 }

@@ -10,13 +10,21 @@ import (
 	"strings"
 )
 
+/* Returns the origin in form <user>@<host> */
 func GetOrigin() string {
 	return GetUser() + "@" + GetHostname()
 }
 
+/* Returns the current user running the gome process */
 func GetUser() string {
 	usr, _ := user.Current()
 	return usr.Username
+}
+
+/* Returns the current users home directory */
+func GetHome() string {
+	usr, _ := user.Current()
+	return usr.HomeDir
 }
 
 // Get Fully Qualified Domain Name
@@ -50,4 +58,34 @@ func GetHostname() string {
 		}
 	}
 	return hostname
+}
+
+/* Checks if the specified address if local (true) or not (false) */
+func IsLocalAddress(testIP string) bool {
+	local := false
+	ifaces, _ := net.Interfaces()
+	// handle err
+	for _, i := range ifaces {
+		addrs, _ := i.Addrs()
+		// handle err
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip.String() == testIP {
+				log.Printf("Local IP...")
+				local = true
+				break
+			}
+			// process IP address
+		}
+		if local == true {
+			break
+		}
+	}
+	return local
 }

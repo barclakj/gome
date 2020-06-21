@@ -3,6 +3,8 @@ package db
 import (
 	"log"
 
+	"realizr.io/gome/env"
+
 	"realizr.io/gome/model"
 
 	// "github.com/google/uuid"
@@ -14,7 +16,7 @@ import (
 
 var database *sql.DB
 
-const DB_FILENAME = "gome.db"
+const DB_FILENAME = "/.gome.db"
 
 const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts") VALUES (?, ?, ?, ?, ?, ?, ?);`
 
@@ -33,14 +35,17 @@ const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_
 
 const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" DESC LIMIT 1;`
 
+/* Creates a new DB */
 func createDB() {
-	file, err := os.Create(DB_FILENAME)
+	filename := env.GetHome() + DB_FILENAME
+	log.Printf(filename)
+	file, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	file.Close()
 
-	db, err := sql.Open("sqlite3", DB_FILENAME)
+	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -54,11 +59,12 @@ func createDB() {
 }
 
 func openDB() {
+	filename := env.GetHome() + DB_FILENAME
 	if database == nil {
-		if _, err := os.Stat(DB_FILENAME); os.IsNotExist(err) {
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
 			createDB()
 		}
-		db, _ := sql.Open("sqlite3", DB_FILENAME)
+		db, _ := sql.Open("sqlite3", filename)
 
 		database = db
 	}

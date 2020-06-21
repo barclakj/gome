@@ -23,21 +23,20 @@ type LogEntryController struct {
 	Alive bool
 }
 
+/* Initializer/constructor */
 func (ctrl *LogEntryController) Init(wg *sync.WaitGroup) {
 	ctrl.Alive = true
-	go ctrl.Listen(wg)
+	go ctrl.listen(wg)
 	time.Sleep(2 * time.Second)
 }
 
-func (ctrl *LogEntryController) IsAlive() bool {
-	return ctrl.Alive
-}
-
+/* Notifies all subscribers of a change to an object. */
 func (ctrl *LogEntryController) notifyInterestedParties(le *model.LogEntry) {
 	subscribers := []string{"192.168.86.255:7456"}
 	broadcast.Send(le, subscribers)
 }
 
+/* Inserts a new log entry. Note that a log entry is immutable so this appends a new version to the list of entries. */
 func (ctrl *LogEntryController) insert(le *model.LogEntry) *model.LogEntry {
 	success := db.InsertLogEntry(le)
 	if success {
@@ -50,7 +49,7 @@ func (ctrl *LogEntryController) insert(le *model.LogEntry) *model.LogEntry {
 	}
 }
 
-/* Saves a new log entry with provided data */
+/* Saves a new log entry with provided data. This is for use locally only (within the server) */
 func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
 	origin := env.GetOrigin()
 	le := model.NewLogEntry(data, origin)
@@ -59,7 +58,7 @@ func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
 	return le
 }
 
-/* Saves a new log entry with provided data */
+/* Updates (appends) to an existing log entry with provided data. This is for use locally only (within the server) */
 func (ctrl *LogEntryController) Update(oid string, data []byte) *model.LogEntry {
 	currentLogEntry := db.FetchLatestLogEntry(oid)
 	if currentLogEntry != nil {
@@ -76,6 +75,12 @@ func (ctrl *LogEntryController) Update(oid string, data []byte) *model.LogEntry 
 	return currentLogEntry
 }
 
+/* Handles a message from a remote server.
+To be valid the object must either be new or the hash must match expectations.
+Those that do not match will be rejected.
+TODO: Change this so rejected entries are stored along a separate timeline so that someone
+could merge these in later if desired.
+*/
 func (ctrl *LogEntryController) fromRemote(le *model.LogEntry, remoteAddress string) *model.LogEntry {
 	currentLogEntry := db.FetchLatestLogEntry(le.Oid)
 	if currentLogEntry != nil {
@@ -97,7 +102,8 @@ func (ctrl *LogEntryController) fromRemote(le *model.LogEntry, remoteAddress str
 
 }
 
-func (ctrl *LogEntryController) Listen(wg *sync.WaitGroup) {
+/* Listens for new messages from other servers. Only messages which are not from the local host are accepted. */
+func (ctrl *LogEntryController) listen(wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -109,14 +115,14 @@ func (ctrl *LogEntryController) Listen(wg *sync.WaitGroup) {
 
 		i := 0
 		buf := make([]byte, MAX_MSG_SIZE)
-		for ctrl.IsAlive() {
+		for ctrl.Alive {
 			sock.SetReadDeadline(time.Now().Add(time.Second * MAX_WAIT_SECONDS))
 			rlen, remoAddr, err := sock.ReadFromUDP(buf)
 			i += rlen
 			if err != nil {
 				fmt.Println(err)
 			} else {
-				if !isLocalAddress(remoAddr.IP.String()) {
+				if !env.IsLocalAddress(remoAddr.IP.String()) {
 					le := model.FromJSON(buf[0:rlen])
 					log.Printf("JSON %s\n", le.ToJSON())
 					ctrl.fromRemote(le, remoAddr.IP.String())
@@ -126,33 +132,4 @@ func (ctrl *LogEntryController) Listen(wg *sync.WaitGroup) {
 	} else {
 		log.Printf("Cannot listen on port %s. Probably in use!\n", CMD_PORT)
 	}
-}
-
-func isLocalAddress(testIP string) bool {
-	local := false
-	ifaces, _ := net.Interfaces()
-	// handle err
-	for _, i := range ifaces {
-		addrs, _ := i.Addrs()
-		// handle err
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip.String() == testIP {
-				log.Printf("Local msg rcvd. Ignoring...")
-				local = true
-				break
-			}
-			// process IP address
-		}
-		if local == true {
-			break
-		}
-	}
-	return local
 }

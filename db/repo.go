@@ -1,11 +1,14 @@
 package db
 
-import  (
-	"realizr.io/gome/model"
+import (
 	"log"
+
+	"realizr.io/gome/model"
+
 	// "github.com/google/uuid"
 	"database/sql"
 	"os"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -13,56 +16,61 @@ var database *sql.DB
 
 const DB_FILENAME = "gome.db"
 
-const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "uuid", "seq", "data", "remote_ts", "ts") VALUES (?, ?, ?, ?, ?, ?);`
+const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts") VALUES (?, ?, ?, ?, ?, ?, ?);`
 
 const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
-		"origin" VARCHAR(100) NOT NULL,
-		"uuid" VARCHAR(100) NOT NULL,
-		"seq" INTEGER NOT NULL,
-		"data" BLOB,
-		"remote_ts" LONG NOT NULL,
-		"ts" LONG NOT NULL);`
+	"oid" VARCHAR(100) NOT NULL,
+	"seq" INTEGER NOT NULL,
+	"origin" VARCHAR(100) NOT NULL,
+	"origin_ts" LONG NOT NULL,
+	"data" BLOB,
+	"hash" VARCHAR(256),
+	"ts" LONG NOT NULL);`
 
-const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("origin", "uuid", "seq", "remote_ts");`
+const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("oid", "seq");`
 
-const QUERY_LE_BY_UUID = `SELECT "origin", "uuid", "seq", "data", "remote_ts", "ts" FROM GOME_LOG WHERE "uuid" = ? ORDER BY "ts" ASC;`
+const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" ASC;`
+
+const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" DESC LIMIT 1;`
 
 func createDB() {
 	file, err := os.Create(DB_FILENAME)
-	if err!=nil {
+	if err != nil {
 		log.Fatal(err.Error())
 	}
 	file.Close()
 
-	db, err  := sql.Open("sqlite3", DB_FILENAME)
-	if err!=nil {
+	db, err := sql.Open("sqlite3", DB_FILENAME)
+	if err != nil {
 		log.Fatal(err.Error())
 	}
 	defer db.Close()
 
-	statement, err :=  db.Prepare(CREATE_LE_SQL)
+	statement, err := db.Prepare(CREATE_LE_SQL)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	statement.Exec()
 }
 
-
 func openDB() {
-	if _, err := os.Stat(DB_FILENAME); os.IsNotExist(err) {
-		createDB()
-	}
-	db, _ := sql.Open("sqlite3", DB_FILENAME)
+	if database == nil {
+		if _, err := os.Stat(DB_FILENAME); os.IsNotExist(err) {
+			createDB()
+		}
+		db, _ := sql.Open("sqlite3", DB_FILENAME)
 
-	database = db
+		database = db
+	}
 }
 
-func insertLogEntry(le *model.LogEntry) bool {
+func InsertLogEntry(le *model.LogEntry) bool {
+	openDB()
 	statement, err := database.Prepare(INSERT_LE_SQL)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	_, err = statement.Exec(le.Origin, le.Uuid, le.Seq, le.Data, le.RemoteTs, le.Ts)
+	_, err = statement.Exec(le.Origin, le.Oid, le.Seq, le.Data, le.Hash, le.OriginTs, le.Ts)
 	if err != nil {
 		log.Fatal(err.Error())
 		return false
@@ -71,8 +79,27 @@ func insertLogEntry(le *model.LogEntry) bool {
 	}
 }
 
-func Load(ref  string) []model.LogEntry {
-	row, err := database.Query(QUERY_LE_BY_UUID, ref)
+func FetchLatestLogEntry(ref string) model.LogEntry {
+	openDB()
+	row, err := database.Query(QUERY_LE_BY_LATEST_OID, ref)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+
+	var le model.LogEntry
+
+	for row.Next() {
+		log.Printf("Scanning next record\n")
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts)
+		break
+	}
+	return le
+}
+
+func LoadAllLogEntries(ref string) []model.LogEntry {
+	openDB()
+	row, err := database.Query(QUERY_LE_BY_OID, ref)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -83,30 +110,9 @@ func Load(ref  string) []model.LogEntry {
 	for row.Next() {
 		log.Printf("Scanning next record\n")
 		le := model.LogEntry{}
-		row.Scan(&le.Origin, &le.Uuid, &le.Seq, &le.Data, &le.RemoteTs, &le.Ts)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts)
 		logs = append(logs, le)
 	}
 	model.Sort(logs)
 	return logs
-}
-
-func Append(le *model.LogEntry) bool {
-	if database == nil {
-		openDB()
-	}
-	if le.Origin == "" || le.Uuid == "" || le.Seq <= 0 || le.RemoteTs <= 0 {
-		log.Printf("Log entry is not valid!\n")
-		return false
-	} else {
-		gl := Load(le.Uuid)
-		for _, tle := range gl {
-			log.Printf("Testing %s %d\n", tle.Origin, tle.Seq)
-			if tle.Origin == le.Origin && tle.Seq == le.Seq {
-				log.Fatal("Existing entry found\n")
-				return false
-			}
-		}
-		log.Printf("Appending %s:%d from %s\n", le.Uuid, le.Seq, le.Origin)
-		return insertLogEntry(le)
-	}
 }

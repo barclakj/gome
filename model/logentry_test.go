@@ -1,26 +1,27 @@
 package model
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateLE(t *testing.T) {
 	data := []byte("This is a simple test...")
 	log.Printf("Testing Create LE!\n")
 	le := NewLogEntry(data, "origin")
-	assert.Equal(t,uint64(1), le.Seq)
+	assert.Equal(t, uint64(1), le.Seq)
 
 	var nille *LogEntry = nil
 	le = NewLogEntry(data, "")
-	assert.Equal(t,nille, le)
+	assert.Equal(t, nille, le)
 
 	le = NewLogEntry(nil, "origin")
 	assert.Equal(t, nille, le)
 }
 
-func TestLEJSON(t  *testing.T) {
+func TestLEJSON(t *testing.T) {
 	log.Printf("Testing JSON serialization/deserialization\n")
 	le := NewLogEntry([]byte("Test"), "origin")
 	jsonString := le.ToJSON()
@@ -29,8 +30,8 @@ func TestLEJSON(t  *testing.T) {
 	le2 := FromJSON([]byte(jsonString))
 	assert.Equal(t, "origin", le2.Origin)
 	assert.Equal(t, le.Ts, le2.Ts)
-	assert.Equal(t, le.Uuid, le2.Uuid)
-	assert.Equal(t, le.RemoteTs, le2.RemoteTs)
+	assert.Equal(t, le.Oid, le2.Oid)
+	assert.Equal(t, le.OriginTs, le2.OriginTs)
 	assert.Equal(t, []byte("Test"), le2.Data)
 }
 
@@ -40,7 +41,8 @@ func TestUpdateLE(t *testing.T) {
 
 	s := le.Seq
 
-	le.Update([]byte("updated data"), "origin2")
+	assert.Equal(t, false, le.Update([]byte("updated data"), "origin2", "wronghash"))
+	assert.Equal(t, true, le.Update([]byte("updated data"), "origin2", Hash(le.Oid, le.Hash, []byte("updated data"))))
 	assert.Equal(t, s+1, le.Seq)
-	assert.Equal(t,"origin2", le.Origin)
+	assert.Equal(t, "origin2", le.Origin)
 }

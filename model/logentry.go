@@ -13,9 +13,10 @@ type LogEntry struct {
 	Data     []byte
 	Origin   string
 	Seq      uint64
-	Uuid     string
+	Oid      string
+	Hash     string
 	Ts       int64
-	RemoteTs int64
+	OriginTs int64
 }
 
 type bySeqAndTs []LogEntry
@@ -45,14 +46,16 @@ func NewLogEntry(data []byte, origin string) *LogEntry {
 
 		id := uuid.New()
 
-		le.Uuid = id.URN()
+		le.Oid = id.URN()
 		le.Seq = 1
 		le.Ts = time.Now().UnixNano()
-		le.RemoteTs = le.Ts
+		le.OriginTs = le.Ts
 		le.Origin = origin
 		le.Data = data
 
-		log.Printf("Uuid %s\n", le.Uuid)
+		le.Hash = Hash(le.Oid, "", le.Data)
+
+		log.Printf("Oid %s\n", le.Oid)
 
 		return &le
 	}
@@ -74,19 +77,31 @@ func FromJSON(jsonString []byte) *LogEntry {
 /* On receipt of LE from remote, deserialize and note the ts on receipt. */
 func ReceiptLogEntry(jsonString []byte) *LogEntry {
 	le := FromJSON(jsonString)
+
 	le.Ts = time.Now().UnixNano()
 	return le
 }
 
 /* Updates a log entry with provided data from origin. increments seq and
  * updates ts. */
-func (le *LogEntry) Update(data []byte, origin string) {
+func (le *LogEntry) Update(data []byte, origin string, hash string) bool {
 	if data != nil && origin != "" {
-		le.Data = data
-		le.Origin = origin
-		le.Seq = le.Seq + 1
-		le.Ts = time.Now().UnixNano()
-		le.RemoteTs = le.Ts
+		newHash := Hash(le.Oid, le.Hash, data)
+		if newHash == hash {
+			log.Printf("%s: Accepting new block after %d from %s\n", le.Oid, le.Seq, origin)
+			le.Data = data
+			le.Origin = origin
+			le.Seq = le.Seq + 1
+			le.Ts = time.Now().UnixNano()
+			le.OriginTs = le.Ts
+			le.Hash = newHash
+			return true
+		} else {
+			log.Printf("%s: Rejecting new block after %d from %s since %s != %s\n", le.Oid, le.Seq, origin, hash, newHash)
+			return false
+		}
+	} else {
+		return false
 	}
 }
 

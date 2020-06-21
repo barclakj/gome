@@ -34,15 +34,3 @@ func TestLEJSON(t *testing.T) {
 	assert.Equal(t, le.OriginTs, le2.OriginTs)
 	assert.Equal(t, []byte("Test"), le2.Data)
 }
-
-func TestUpdateLE(t *testing.T) {
-	log.Printf("Testing update of LE\n")
-	le := NewLogEntry([]byte("new le"), "origin")
-
-	s := le.Seq
-
-	assert.Equal(t, false, le.Update([]byte("updated data"), "origin2", "wronghash"))
-	assert.Equal(t, true, le.Update([]byte("updated data"), "origin2", Hash(le.Oid, le.Hash, []byte("updated data"))))
-	assert.Equal(t, s+1, le.Seq)
-	assert.Equal(t, "origin2", le.Origin)
-}

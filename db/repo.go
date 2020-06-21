@@ -79,7 +79,7 @@ func InsertLogEntry(le *model.LogEntry) bool {
 	}
 }
 
-func FetchLatestLogEntry(ref string) model.LogEntry {
+func FetchLatestLogEntry(ref string) *model.LogEntry {
 	openDB()
 	row, err := database.Query(QUERY_LE_BY_LATEST_OID, ref)
 	if err != nil {
@@ -87,14 +87,20 @@ func FetchLatestLogEntry(ref string) model.LogEntry {
 	}
 	defer row.Close()
 
-	var le model.LogEntry
+	le := model.LogEntry{}
 
 	for row.Next() {
-		log.Printf("Scanning next record\n")
+		log.Printf("Scanning next record ")
 		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts)
+		log.Printf("...found %s\n", le.Oid)
 		break
 	}
-	return le
+	if le.Oid == "" {
+		var none *model.LogEntry
+		return none
+	} else {
+		return &le
+	}
 }
 
 func LoadAllLogEntries(ref string) []model.LogEntry {

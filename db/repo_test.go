@@ -61,8 +61,8 @@ func perfTestFetch(oid string) {
 func TestPerf(t *testing.T) {
 	perfTest(100)
 	perfTest(200)
-	perfTest(300)
-	perfTest(400)
+	// perfTest(300)
+	// perfTest(400)
 	oid := perfTest(500)
 
 	for i := 1; i < 10; i++ {

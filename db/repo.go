@@ -16,7 +16,7 @@ import (
 
 var database *sql.DB
 
-const DB_FILENAME = "/.gome.db"
+const DB_FILENAME = "/gome.db"
 
 const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts") VALUES (?, ?, ?, ?, ?, ?, ?);`
 
@@ -29,11 +29,23 @@ const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
 	"hash" VARCHAR(256),
 	"ts" LONG NOT NULL);`
 
+const CREATE_LE_OBSERVER_SQL = `CREATE TABLE GOME_LOG_OBSERVER (
+	"oid" VARCHAR(100) NOT NULL,
+	"observer" VARCHAR(378) NOT NULL);`
+
 const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("oid", "seq");`
+
+const CREATE_LE_OBSERVER_PK = `CREATE UNIQUE INDEX log_obs_pk ON GOME_LOG_OBSERVER("oid", "observer");`
 
 const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" ASC;`
 
 const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" DESC LIMIT 1;`
+
+const QUERY_LE_OBSERVERS = `SELECT "observer" FROM GOME_LOG_OBSERVER WHERE "oid" = ?;`
+
+const INSERT_LE_OBS_SQL = `INSERT INTO GOME_LOG_OBSERVER ("oid", "observer") VALUES (?, ?);`
+
+const DELETE_LE_OBS_SQL = `DELETE FROM GOME_LOG_OBSERVER WHERE "oid"=? AND "observer"=?;`
 
 /* Creates a new DB */
 func createDB() {
@@ -52,6 +64,24 @@ func createDB() {
 	defer db.Close()
 
 	statement, err := db.Prepare(CREATE_LE_SQL)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	statement.Exec()
+
+	statement, err = db.Prepare(CREATE_LE_PK)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	statement.Exec()
+
+	statement, err = db.Prepare(CREATE_LE_OBSERVER_SQL)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	statement.Exec()
+
+	statement, err = db.Prepare(CREATE_LE_OBSERVER_PK)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -127,4 +157,54 @@ func LoadAllLogEntries(ref string) []model.LogEntry {
 	}
 	model.Sort(logs)
 	return logs
+}
+
+func LoadAllObservers(ref string) model.LogEntryObservers {
+	openDB()
+	row, err := database.Query(QUERY_LE_OBSERVERS, ref)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+
+	observers := model.LogEntryObservers{}
+	observers.Oid = ref
+
+	for row.Next() {
+		log.Printf("Observer...\n")
+		var obs string
+		row.Scan(&obs)
+		observers.Observers = append(observers.Observers, obs)
+	}
+	return observers
+}
+
+func AddObserver(ref string, observer string) bool {
+	openDB()
+	statement, err := database.Prepare(INSERT_LE_OBS_SQL)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	_, err = statement.Exec(ref, observer)
+	if err != nil {
+		log.Printf(err.Error())
+		return false
+	} else {
+		return true
+	}
+}
+
+func RemoveObserver(ref string, observer string) bool {
+	openDB()
+	statement, err := database.Prepare(DELETE_LE_OBS_SQL)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	_, err = statement.Exec(ref, observer)
+	if err != nil {
+		log.Printf(err.Error())
+		return false
+	} else {
+		return true
+	}
 }

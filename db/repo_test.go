@@ -69,3 +69,31 @@ func TestPerf(t *testing.T) {
 		perfTestFetch(oid)
 	}
 }
+
+func TestInsertObserver(t *testing.T) {
+	le := model.NewLogEntry([]byte("simple test"), "origin")
+
+	log.Printf("Adding 1st observer for %s", le.Oid)
+	assert.Equal(t, true, AddObserver(le.Oid, "192.168.86.1:7645"))
+	log.Printf("Adding 2nd observer for %s", le.Oid)
+	assert.Equal(t, true, AddObserver(le.Oid, "192.168.86.2:7645"))
+
+	log.Printf("Adding 3rd DUPLICATE observer for %s", le.Oid)
+	assert.Equal(t, false, AddObserver(le.Oid, "192.168.86.2:7645"))
+
+	log.Printf("Loading observer for %s", le.Oid)
+	observers := LoadAllObservers(le.Oid)
+
+	log.Printf("Checking assertions from load for %s", le.Oid)
+	assert.Equal(t, observers.Oid, le.Oid)
+	assert.Equal(t, len(observers.Observers), 2)
+
+	log.Printf("Adding observer for %s", le.Oid)
+	assert.Equal(t, true, RemoveObserver(le.Oid, "192.168.86.2:7645"))
+
+	log.Printf("Loading observer for %s", le.Oid)
+	observers = LoadAllObservers(le.Oid)
+
+	log.Printf("Checking assertions from REload for %s", le.Oid)
+	assert.Equal(t, len(observers.Observers), 1)
+}

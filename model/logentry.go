@@ -19,6 +19,11 @@ type LogEntry struct {
 	OriginTs int64
 }
 
+type LogEntryObservers struct {
+	Oid       string
+	Observers []string
+}
+
 type bySeqAndTs []LogEntry
 
 func (a bySeqAndTs) Len() int      { return len(a) }

@@ -17,7 +17,7 @@ import (
 
 const MAX_MSG_SIZE = 2048000
 const CMD_PORT = "0.0.0.0:7456"
-const MAX_WAIT_SECONDS = 1
+const MAX_WAIT_SECONDS = 10
 
 type LogEntryController struct {
 	Alive bool
@@ -32,8 +32,13 @@ func (ctrl *LogEntryController) Init(wg *sync.WaitGroup) {
 
 /* Notifies all subscribers of a change to an object. */
 func (ctrl *LogEntryController) notifyInterestedParties(le *model.LogEntry) {
-	subscribers := []string{"192.168.86.255:7456"}
-	broadcast.Send(le, subscribers)
+	observers := []string{"192.168.86.255:7456"}
+
+	registeredObservers := db.LoadAllObservers(le.Oid)
+	observers = append(observers, registeredObservers.Observers...)
+	log.Printf("Raising notification for %d observers on object %s\n", len(observers), le.Oid)
+
+	broadcast.Send(le, observers)
 }
 
 /* Inserts a new log entry. Note that a log entry is immutable so this appends a new version to the list of entries. */

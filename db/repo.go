@@ -18,7 +18,7 @@ var database *sql.DB
 
 const DB_FILENAME = "/gome.db"
 
-const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts") VALUES (?, ?, ?, ?, ?, ?, ?);`
+const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch") VALUES (?, ?, ?, ?, ?, ?, ?, ?);`
 
 const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
 	"oid" VARCHAR(100) NOT NULL,
@@ -27,19 +27,22 @@ const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
 	"origin_ts" LONG NOT NULL,
 	"data" BLOB,
 	"hash" VARCHAR(256),
+	"branch" LONG NOT NULL,
 	"ts" LONG NOT NULL);`
 
 const CREATE_LE_OBSERVER_SQL = `CREATE TABLE GOME_LOG_OBSERVER (
 	"oid" VARCHAR(100) NOT NULL,
 	"observer" VARCHAR(378) NOT NULL);`
 
-const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("oid", "seq");`
+const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("oid", "seq", "branch");`
 
 const CREATE_LE_OBSERVER_PK = `CREATE UNIQUE INDEX log_obs_pk ON GOME_LOG_OBSERVER("oid", "observer");`
 
-const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" ASC;`
+const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" ASC;`
 
-const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts" FROM GOME_LOG WHERE "oid" = ? ORDER BY "seq" DESC LIMIT 1;`
+const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "batch" ASC;`
+
+const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" DESC LIMIT 1;`
 
 const QUERY_LE_OBSERVERS = `SELECT "observer" FROM GOME_LOG_OBSERVER WHERE "oid" = ?;`
 
@@ -106,7 +109,7 @@ func InsertLogEntry(le *model.LogEntry) bool {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	_, err = statement.Exec(le.Origin, le.Oid, le.Seq, le.Data, le.Hash, le.OriginTs, le.Ts)
+	_, err = statement.Exec(le.Origin, le.Oid, le.Seq, le.Data, le.Hash, le.OriginTs, le.Ts, le.Branch)
 	if err != nil {
 		log.Fatal(err.Error())
 		return false
@@ -115,9 +118,30 @@ func InsertLogEntry(le *model.LogEntry) bool {
 	}
 }
 
-func FetchLatestLogEntry(ref string) *model.LogEntry {
+func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
 	openDB()
-	row, err := database.Query(QUERY_LE_BY_LATEST_OID, ref)
+	row, err := database.Query(QUERY_LE_BY_OID_AND_SEQ, ref, seq)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+
+	var logEntries []model.LogEntry
+
+	for row.Next() {
+		le := model.LogEntry{}
+		log.Printf("Scanning next record ")
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch)
+		log.Printf("...found %s\n", le.Oid)
+
+		logEntries = append(logEntries, le)
+	}
+	return logEntries
+}
+
+func FetchLatestLogEntry(ref string, branch uint64) *model.LogEntry {
+	openDB()
+	row, err := database.Query(QUERY_LE_BY_LATEST_OID, ref, branch)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -127,7 +151,7 @@ func FetchLatestLogEntry(ref string) *model.LogEntry {
 
 	for row.Next() {
 		log.Printf("Scanning next record ")
-		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch)
 		log.Printf("...found %s\n", le.Oid)
 		break
 	}
@@ -139,9 +163,9 @@ func FetchLatestLogEntry(ref string) *model.LogEntry {
 	}
 }
 
-func LoadAllLogEntries(ref string) []model.LogEntry {
+func LoadAllLogEntries(ref string, branch uint64) []model.LogEntry {
 	openDB()
-	row, err := database.Query(QUERY_LE_BY_OID, ref)
+	row, err := database.Query(QUERY_LE_BY_OID, ref, branch)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,7 +176,7 @@ func LoadAllLogEntries(ref string) []model.LogEntry {
 	for row.Next() {
 		log.Printf("Scanning next record\n")
 		le := model.LogEntry{}
-		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch)
 		logs = append(logs, le)
 	}
 	model.Sort(logs)

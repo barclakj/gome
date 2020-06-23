@@ -64,8 +64,8 @@ func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
 }
 
 /* Updates (appends) to an existing log entry with provided data. This is for use locally only (within the server) */
-func (ctrl *LogEntryController) Update(oid string, data []byte) *model.LogEntry {
-	currentLogEntry := db.FetchLatestLogEntry(oid)
+func (ctrl *LogEntryController) Update(oid string, branch uint64, data []byte) *model.LogEntry {
+	currentLogEntry := db.FetchLatestLogEntry(oid, branch)
 	if currentLogEntry != nil {
 		currentLogEntry.Origin = env.GetOrigin()
 		newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, data)
@@ -87,23 +87,23 @@ TODO: Change this so rejected entries are stored along a separate timeline so th
 could merge these in later if desired.
 */
 func (ctrl *LogEntryController) fromRemote(le *model.LogEntry, remoteAddress string) *model.LogEntry {
-	currentLogEntry := db.FetchLatestLogEntry(le.Oid)
-	if currentLogEntry != nil {
+	branch := uint64(0)
+	currentLogEntries := db.FetchLogEntries(le.Oid, le.Seq-1)
+
+	for _, currentLogEntry := range currentLogEntries {
 		newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, le.Data)
-		if le.Hash == newHash {
+		if le.Hash == newHash { // we've found a branch
 			le.Ts = time.Now().UnixNano()
+			le.Branch = currentLogEntry.Branch
 			log.Printf("Updating %s from %s!\n", le.Oid, remoteAddress)
-			currentLogEntry = ctrl.insert(le)
-		} else {
-			log.Printf("Rejecting update on %s from %s due to hash mismatch!\n", le.Oid, remoteAddress)
-			currentLogEntry = nil
+			return ctrl.insert(le)
 		}
-	} else {
-		le.Ts = time.Now().UnixNano()
-		log.Printf("Creating %s from %s!\n", le.Oid, remoteAddress)
-		currentLogEntry = ctrl.insert(le)
+		branch = currentLogEntry.Branch + 1
 	}
-	return currentLogEntry
+	le.Ts = time.Now().UnixNano()
+	le.Branch = branch
+	log.Printf("Creating %s from %s!\n", le.Oid, remoteAddress)
+	return ctrl.insert(le)
 
 }
 

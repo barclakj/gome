@@ -17,6 +17,7 @@ type LogEntry struct {
 	Hash     string
 	Ts       int64
 	OriginTs int64
+	Branch   uint64
 }
 
 type LogEntryObservers struct {
@@ -57,6 +58,7 @@ func NewLogEntry(data []byte, origin string) *LogEntry {
 		le.OriginTs = le.Ts
 		le.Origin = origin
 		le.Data = data
+		le.Branch = 0
 
 		log.Printf("Oid %s\n", le.Oid)
 

@@ -24,7 +24,7 @@ func TestTenUpdates(t *testing.T) {
 		InsertLogEntry(le) // note that hash here will be wrong but we're testing DB, not hashed updates
 	}
 
-	le2 := FetchLatestLogEntry(le.Oid)
+	le2 := FetchLatestLogEntry(le.Oid, 0)
 	log.Printf("Found object %s with latest seq %d \n", le2.Oid, le2.Seq)
 	assert.Equal(t, le2.Seq, uint64(10))
 	assert.Equal(t, le2.Oid, le.Oid)
@@ -40,7 +40,7 @@ func perfTest(num int) string {
 	}
 	endInsert := time.Now().UnixNano()
 
-	le2 := FetchLatestLogEntry(le.Oid)
+	le2 := FetchLatestLogEntry(le.Oid, 0)
 	log.Printf("Found object %s with latest seq %d \n", le2.Oid, le2.Seq)
 	endQuery := time.Now().UnixNano()
 	log.Printf("%d records, Insert %dms, Fetch %dms, Total %dms", num, ((endInsert - started) / 1000000), ((endQuery - endInsert) / 1000000), ((endQuery - started) / 1000000))
@@ -52,7 +52,7 @@ func perfTestFetch(oid string) {
 
 	// oid := "urn:uuid:5f6c5a8c-64e7-46f5-af34-f2b862029133"
 
-	le2 := FetchLatestLogEntry(oid)
+	le2 := FetchLatestLogEntry(oid, 0)
 	log.Printf("Found object %s with latest seq %d \n", le2.Oid, le2.Seq)
 	endQuery := time.Now().UnixNano()
 	log.Printf("%d records, Fetched %dms\n", le2.Seq, ((endQuery - started) / 1000000))

@@ -7,18 +7,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestValidate(t *testing.T) {
+	data := []byte("This is a simple test...")
+	le := NewLogEntry(data, "")
+	assert.Equal(t, false, le.Validate())
+	le = NewLogEntry([]byte(""), "test")
+	assert.Equal(t, false, le.Validate())
+	le = NewLogEntry(data, "test")
+	le.Oid = ""
+	assert.Equal(t, false, le.Validate())
+	le = NewLogEntry(data, "test")
+	assert.Equal(t, true, le.Validate())
+
+	le = NewLogEntry(data, "test")
+	le.Seq = 0
+	assert.Equal(t, false, le.Validate())
+
+	le = NewLogEntry(data, "test")
+	le.Branch = -1
+	assert.Equal(t, false, le.Validate())
+}
+
 func TestCreateLE(t *testing.T) {
 	data := []byte("This is a simple test...")
 	log.Printf("Testing Create LE!\n")
 	le := NewLogEntry(data, "origin")
 	assert.Equal(t, uint64(1), le.Seq)
-
-	var nille *LogEntry = nil
-	le = NewLogEntry(data, "")
-	assert.Equal(t, nille, le)
-
-	le = NewLogEntry(nil, "origin")
-	assert.Equal(t, nille, le)
 }
 
 func TestLEJSON(t *testing.T) {

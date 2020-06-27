@@ -10,14 +10,15 @@ import (
 )
 
 type LogEntry struct {
-	Data     []byte
-	Origin   string
-	Seq      uint64
-	Oid      string
-	Hash     string
-	Ts       int64
-	OriginTs int64
-	Branch   uint64
+	Data           []byte
+	Origin         string
+	Seq            uint64
+	Oid            string
+	Hash           string
+	Ts             int64
+	OriginTs       int64
+	Branch         int64
+	PreviousBranch int64
 }
 
 type LogEntryObservers struct {
@@ -45,24 +46,29 @@ func (a bySeqAndTs) Less(i, j int) bool {
 
 /* Creates a new log entry - complete with defined origin and data */
 func NewLogEntry(data []byte, origin string) *LogEntry {
-	if data == nil || origin == "" {
-		return nil
+	le := LogEntry{}
+
+	id := uuid.New()
+
+	le.Oid = id.URN()
+	le.Seq = 1
+	le.Ts = time.Now().UnixNano()
+	le.OriginTs = le.Ts
+	le.Origin = origin
+	le.Data = data
+	le.Branch = 0
+	le.PreviousBranch = -1
+
+	log.Printf("Oid %s\n", le.Oid)
+
+	return &le
+}
+
+func (le *LogEntry) Validate() bool {
+	if len(le.Oid) > 0 && le.Seq >= 1 && le.Branch >= 0 && le.Data != nil && len(le.Data) > 0 && len(le.Origin) > 0 {
+		return true
 	} else {
-		le := LogEntry{}
-
-		id := uuid.New()
-
-		le.Oid = id.URN()
-		le.Seq = 1
-		le.Ts = time.Now().UnixNano()
-		le.OriginTs = le.Ts
-		le.Origin = origin
-		le.Data = data
-		le.Branch = 0
-
-		log.Printf("Oid %s\n", le.Oid)
-
-		return &le
+		return false
 	}
 }
 

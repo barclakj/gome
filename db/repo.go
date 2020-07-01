@@ -172,7 +172,7 @@ func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
 	return logEntries
 }
 
-func FetchLatestLogEntry(ref string, branch uint64) *model.LogEntry {
+func FetchLatestLogEntry(ref string, branch int64) *model.LogEntry {
 	openDB()
 	row, err := database.Query(QUERY_LE_BY_LATEST_OID, ref, branch)
 	if err != nil {

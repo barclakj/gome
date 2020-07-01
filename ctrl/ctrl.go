@@ -16,7 +16,9 @@ import (
 )
 
 const MAX_MSG_SIZE = 2048000
-const CMD_PORT = "0.0.0.0:7456"
+const CMD_PORT = ":7456"
+const CMD_ADDRESS = "0.0.0.0" + CMD_PORT
+const CMD_GATEWAY = "192.168.86.255" + CMD_PORT
 const MAX_WAIT_SECONDS = 1
 
 type LogEntryController struct {
@@ -32,7 +34,7 @@ func (ctrl *LogEntryController) Init(wg *sync.WaitGroup) {
 
 /* Notifies all subscribers of a change to an object. */
 func (ctrl *LogEntryController) notifyInterestedParties(le *model.LogEntry) {
-	observers := []string{"192.168.86.255:7456"}
+	observers := []string{CMD_GATEWAY}
 
 	registeredObservers := db.LoadAllObservers(le.Oid)
 	observers = append(observers, registeredObservers.Observers...)
@@ -58,6 +60,11 @@ func (ctrl *LogEntryController) insert(le *model.LogEntry) *model.LogEntry {
 	return rval
 }
 
+/* Fetch an existing log entry */
+func (ctrl *LogEntryController) Fetch(oid string, branch int64) *model.LogEntry {
+	return db.FetchLatestLogEntry(oid, branch)
+}
+
 /* Saves a new log entry with provided data. This is for use locally only (within the server) */
 func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
 	origin := env.GetOrigin()
@@ -68,7 +75,7 @@ func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
 }
 
 /* Updates (appends) to an existing log entry with provided data. This is for use locally only (within the server) */
-func (ctrl *LogEntryController) Update(oid string, branch uint64, data []byte) *model.LogEntry {
+func (ctrl *LogEntryController) Update(oid string, branch int64, data []byte) *model.LogEntry {
 	currentLogEntry := db.FetchLatestLogEntry(oid, branch)
 	if currentLogEntry != nil {
 		currentLogEntry.Origin = env.GetOrigin()
@@ -97,6 +104,55 @@ func (ctrl *LogEntryController) processStashedLogEntries(oid string, seq uint64)
 	return ultLe
 }
 
+func (ctrl *LogEntryController) raiseObserveCommand(oid string, address string) {
+	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.OBSERVE_COMMAND}
+
+	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le.Oid = model.CMD_OID
+	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+}
+
+func (ctrl *LogEntryController) raiseIgnoreCommand(oid string, address string) {
+	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.IGNORE_COMMAND}
+
+	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le.Oid = model.CMD_OID
+	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+}
+
+func (ctrl *LogEntryController) raiseReplayCommand(oid string, branch int64, address string) {
+	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.REPLAY_COMMAND}
+
+	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le.Oid = model.CMD_OID
+	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+}
+
+func (ctrl *LogEntryController) raiseSyncCommand(oid string, branch int64, address string) {
+	le := db.FetchLatestLogEntry(oid, branch)
+
+	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.SYNC_COMMAND, Hash: le.Hash}
+
+	cmdLe := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	cmdLe.Oid = model.CMD_OID
+	broadcast.Send(cmdLe, []string{CMD_GATEWAY, address + CMD_PORT})
+}
+
+func (ctrl *LogEntryController) handleCommand(cmd []byte) {
+	command := model.CmdFromJSON(cmd)
+
+	switch command.Command {
+	case model.OBSERVE_COMMAND:
+		db.AddObserver(command.Oid, command.Origin)
+		break
+	case model.IGNORE_COMMAND:
+		db.RemoveObserver(command.Oid, command.Origin)
+		break
+	default:
+		log.Printf("Unknown command recieved %s on %s from %s", command.Command, command.Oid, command.Origin)
+	}
+}
+
 /* Handles a message from a remote server.
 To be valid the object must either be new or the hash must match expectations.
 Those that do not match will be rejected.
@@ -108,7 +164,10 @@ func (ctrl *LogEntryController) FromRemote(le *model.LogEntry) *model.LogEntry {
 	var rval *model.LogEntry
 
 	if le.Validate() {
-		if db.CheckLogEntryExistsByHash(le.Oid, le.Seq, le.Hash) {
+		if le.Oid == model.CMD_OID {
+			// handle command
+			ctrl.handleCommand(le.Data)
+		} else if db.CheckLogEntryExistsByHash(le.Oid, le.Seq, le.Hash) {
 			log.Printf("Ignoring duplicate...")
 		} else if le.Seq == 1 {
 			// why do you think I'm interested in this?

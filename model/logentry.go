@@ -26,6 +26,21 @@ type LogEntryObservers struct {
 	Observers []string
 }
 
+type LogEntryCommand struct {
+	Oid     string
+	Branch  int64
+	Command string
+	Origin  string
+	Hash    string
+}
+
+const OBSERVE_COMMAND = `observe` // notifies that we're interested in observing the entity.
+const REPLAY_COMMAND = `replay`   // notify replay all events for the object/branch
+const IGNORE_COMMAND = `ignore`   // notifies that we want to stop getting events fo the entity
+const SYNC_COMMAND = `sync`       // broadcasts the latest hash for the branch for comparison
+
+const CMD_OID = `urn:uuid:1`
+
 type bySeqAndTs []LogEntry
 
 func (a bySeqAndTs) Len() int      { return len(a) }
@@ -88,4 +103,17 @@ func FromJSON(jsonString []byte) *LogEntry {
 /* Sorts an array of log entries by sequence and timestamp */
 func Sort(logs []LogEntry) {
 	sort.Sort(bySeqAndTs(logs))
+}
+
+/* Converts a log entry command to a string json representing. */
+func (cmd *LogEntryCommand) ToJSON() string {
+	jsonMap, _ := json.Marshal(cmd)
+	return string(jsonMap)
+}
+
+/* Converts a json string of a log-entry-command to a log entry command. */
+func CmdFromJSON(jsonString []byte) *LogEntryCommand {
+	cmd := LogEntryCommand{}
+	json.Unmarshal(jsonString, &cmd)
+	return &cmd
 }

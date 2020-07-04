@@ -16,6 +16,10 @@ import (
 
 const X_GOME_BRANCH = "X_GOME_BRANCH"
 const X_GOME_HASH = "X_GOME_HASH"
+const X_GOME_TYPE = "X_GOME_TYPE"
+const X_GOME_ID = "X_GOME_ID"
+const X_GOME_SEQ = "X_GOME_SEQ"
+const DEFAULT_CONTENT_TYPE = "application/octetstream"
 
 var controller ctrl.LogEntryController
 
@@ -29,6 +33,11 @@ func getRequestBatch(r *http.Request) int64 {
 	}
 }
 
+// Returns the current entity type of the document.
+func getRequestEntityType(r *http.Request) string {
+	return r.Header.Get(X_GOME_TYPE)
+}
+
 // Returns the current hash of the document.
 func getRequestHash(r *http.Request) string {
 	return r.Header.Get(X_GOME_HASH)
@@ -39,8 +48,36 @@ func getRequestData(r *http.Request) []byte {
 	return body
 }
 
+// Returns the content type or default if not founmd.
+func getRequestContentType(r *http.Request) string {
+	ct := r.Header.Get("Content-Type")
+	if ct != "" {
+		return ct
+	} else {
+		return DEFAULT_CONTENT_TYPE
+	}
+}
+
 func createArticle(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Creating document...")
+	entityType := getRequestEntityType(r)
+	body := getRequestData(r)
+	contentType := getRequestContentType(r)
+
+	le := controller.Save(entityType, contentType, body)
+
+	if le == nil {
+		log.Fatalf("Failed to save document... ")
+
+	} else {
+		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
+		w.Header().Add(X_GOME_SEQ, strconv.FormatUint(le.Seq, 10))
+		w.Header().Add(X_GOME_HASH, le.Hash)
+		w.Header().Add(X_GOME_TYPE, le.EntityType)
+		w.Header().Add(X_GOME_ID, le.Oid)
+		w.WriteHeader(http.StatusOK)
+
+	}
 }
 
 func updateArticle(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +92,14 @@ func updateArticle(w http.ResponseWriter, r *http.Request) {
 
 	if le == nil {
 		log.Fatalf("Failed to updated document (id, branch, hash): %s %d %s", oid, branch, hash)
+
+	} else {
+		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
+		w.Header().Add(X_GOME_SEQ, strconv.FormatUint(le.Seq, 10))
+		w.Header().Add(X_GOME_HASH, le.Hash)
+		w.Header().Add(X_GOME_TYPE, le.EntityType)
+		w.Header().Add(X_GOME_ID, le.Oid)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -73,7 +118,10 @@ func fetchArticle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", le.ContentType)
 		w.Header().Add("Content-Length", strconv.FormatInt(int64(len(le.Data)), 10))
 		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
+		w.Header().Add(X_GOME_SEQ, strconv.FormatUint(le.Seq, 10))
 		w.Header().Add(X_GOME_HASH, le.Hash)
+		w.Header().Add(X_GOME_TYPE, le.EntityType)
+		w.Header().Add(X_GOME_ID, le.Oid)
 		w.WriteHeader(http.StatusOK)
 		w.Write(le.Data)
 	}

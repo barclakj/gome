@@ -77,6 +77,32 @@ func TestRestPut(t *testing.T) {
 	if err == nil {
 		log.Printf("Response StatusCode: %d", res.StatusCode)
 		assert.Equal(t, 200, res.StatusCode)
+
+		le2 := ctrl.Fetch(le.Oid, le.Branch)
+		log.Printf("String data: %s", string(le2.Data))
+		assert.Equal(t, le2.Data, []byte("This is some updated text!"))
+	} else {
+		log.Fatalf("Error updating resource: %s", err)
+	}
+}
+
+func TestRestPost(t *testing.T) {
+	log.Printf("Starting webserver...")
+	url := "http://localhost:17456/log/"
+	log.Printf("Updating by URL: %s", url)
+
+	req, _ := http.NewRequest("POST", url, strings.NewReader("This is some updated text!"))
+	req.Header.Add(X_GOME_TYPE, "TEST")
+	res, err := http.DefaultClient.Do(req)
+	if err == nil {
+		log.Printf("Response StatusCode: %d", res.StatusCode)
+		assert.Equal(t, 200, res.StatusCode)
+
+		assert.Equal(t, res.Header.Get(X_GOME_BRANCH), "0")
+		assert.True(t, res.Header.Get(X_GOME_HASH) != "")
+		assert.True(t, res.Header.Get(X_GOME_ID) != "")
+		assert.True(t, res.Header.Get(X_GOME_TYPE) != "")
+
 	} else {
 		log.Fatalf("Error updating resource: %s", err)
 	}

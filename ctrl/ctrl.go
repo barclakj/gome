@@ -82,17 +82,24 @@ func (ctrl *LogEntryController) Update(oid string, branch int64, hash string, da
 	if currentLogEntry != nil {
 		if currentLogEntry.Hash == hash {
 			currentLogEntry.Origin = env.GetOrigin()
-			newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, data)
+			currentLogEntry.Data = data
+			newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, currentLogEntry.Data)
 			currentLogEntry.Hash = newHash
 			currentLogEntry.Seq = currentLogEntry.Seq + 1
 			currentLogEntry.Ts = time.Now().UnixNano()
 			currentLogEntry.OriginTs = time.Now().UnixNano()
 			currentLogEntry = ctrl.insert(currentLogEntry)
+
+			log.Printf("Successfully updated %s %d", currentLogEntry.Oid, currentLogEntry.Branch)
+			return currentLogEntry
 		} else {
+			log.Printf("Failed to update log. Hash mismatch on: %s %d %s!=%s", oid, branch, hash, currentLogEntry.Hash)
 			return nil
 		}
+	} else {
+		log.Printf("Failed to update log. Does not exist: %s %d", oid, branch)
+		return nil
 	}
-	return currentLogEntry
 }
 
 func (ctrl *LogEntryController) processStashedLogEntries(oid string, seq uint64) *model.LogEntry {

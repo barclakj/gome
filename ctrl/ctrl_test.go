@@ -42,11 +42,11 @@ func TestUpdateLE(t *testing.T) {
 	if le != nil {
 		assert.Equal(t, uint64(1), le.Seq)
 
-		le = ctrl.Update(le.Oid, 0, "TEST", "application/octetstream", []byte("this is some new data"))
+		le = ctrl.Update(le.Oid, 0, le.Hash, []byte("this is some new data"))
 		assert.Equal(t, true, le != nil)
 		assert.Equal(t, uint64(2), le.Seq)
 
-		le = ctrl.Update(le.Oid, 0, "TEST", "application/octetstream", []byte("and some more data"))
+		le = ctrl.Update(le.Oid, 0, le.Hash, []byte("and some more data"))
 		assert.Equal(t, true, le != nil)
 		assert.Equal(t, uint64(3), le.Seq)
 

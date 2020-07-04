@@ -43,6 +43,9 @@ const SYNC_COMMAND = `sync`       // broadcasts the latest hash for the branch f
 
 const CMD_OID = `urn:uuid:1`
 
+const DEFAULT_BRANCH = 0
+const DEFAULT_SEQ = 1
+
 type bySeqAndTs []LogEntry
 
 func (a bySeqAndTs) Len() int      { return len(a) }
@@ -68,12 +71,12 @@ func NewLogEntry(entityType string, contentType string, data []byte, origin stri
 	id := uuid.New()
 
 	le.Oid = id.URN()
-	le.Seq = 1
+	le.Seq = DEFAULT_SEQ
 	le.Ts = time.Now().UnixNano()
 	le.OriginTs = le.Ts
 	le.Origin = origin
 	le.Data = data
-	le.Branch = 0
+	le.Branch = DEFAULT_BRANCH
 	le.PreviousBranch = -1
 	le.ContentType = contentType
 	le.EntityType = entityType

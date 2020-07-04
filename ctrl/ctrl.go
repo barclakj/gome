@@ -77,20 +77,20 @@ func (ctrl *LogEntryController) Save(entityType string, contentType string, data
 }
 
 /* Updates (appends) to an existing log entry with provided data. This is for use locally only (within the server) */
-func (ctrl *LogEntryController) Update(oid string, branch int64, entityType string, contentType string, data []byte) *model.LogEntry {
+func (ctrl *LogEntryController) Update(oid string, branch int64, hash string, data []byte) *model.LogEntry {
 	currentLogEntry := db.FetchLatestLogEntry(oid, branch)
 	if currentLogEntry != nil {
-		currentLogEntry.Origin = env.GetOrigin()
-		newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, data)
-		currentLogEntry.Hash = newHash
-		currentLogEntry.Seq = currentLogEntry.Seq + 1
-		currentLogEntry.Ts = time.Now().UnixNano()
-		currentLogEntry.OriginTs = time.Now().UnixNano()
-		currentLogEntry.EntityType = entityType
-		currentLogEntry.ContentType = contentType
-		currentLogEntry = ctrl.insert(currentLogEntry)
-	} else {
-		currentLogEntry = ctrl.Save(entityType, contentType, data)
+		if currentLogEntry.Hash == hash {
+			currentLogEntry.Origin = env.GetOrigin()
+			newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, data)
+			currentLogEntry.Hash = newHash
+			currentLogEntry.Seq = currentLogEntry.Seq + 1
+			currentLogEntry.Ts = time.Now().UnixNano()
+			currentLogEntry.OriginTs = time.Now().UnixNano()
+			currentLogEntry = ctrl.insert(currentLogEntry)
+		} else {
+			return nil
+		}
 	}
 	return currentLogEntry
 }

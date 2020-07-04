@@ -19,6 +19,8 @@ type LogEntry struct {
 	OriginTs       int64
 	Branch         int64
 	PreviousBranch int64
+	ContentType    string
+	EntityType     string
 }
 
 type LogEntryObservers struct {
@@ -60,7 +62,7 @@ func (a bySeqAndTs) Less(i, j int) bool {
 }
 
 /* Creates a new log entry - complete with defined origin and data */
-func NewLogEntry(data []byte, origin string) *LogEntry {
+func NewLogEntry(entityType string, contentType string, data []byte, origin string) *LogEntry {
 	le := LogEntry{}
 
 	id := uuid.New()
@@ -73,6 +75,8 @@ func NewLogEntry(data []byte, origin string) *LogEntry {
 	le.Data = data
 	le.Branch = 0
 	le.PreviousBranch = -1
+	le.ContentType = contentType
+	le.EntityType = entityType
 
 	log.Printf("Oid %s\n", le.Oid)
 

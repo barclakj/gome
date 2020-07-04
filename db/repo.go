@@ -19,7 +19,7 @@ var database *sql.DB
 
 const DB_FILENAME = "/gome.db"
 
-const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`
+const INSERT_LE_SQL = `INSERT INTO GOME_LOG ("origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
 
 const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
 	"oid" VARCHAR(100) NOT NULL,
@@ -30,11 +30,15 @@ const CREATE_LE_SQL = `CREATE TABLE GOME_LOG (
 	"hash" VARCHAR(256),
 	"branch" LONG NOT NULL,
 	"previous_branch" LONG,
-	"ts" LONG NOT NULL);`
+	"entity_type" VARCHAR(100) NOT NULL,
+	"content_type" VARCHAR(100) NOT NULL,
+	"ts" LONG NOT NULL,
+	UNIQUE ("oid", "seq", "branch"));`
 
 const CREATE_LE_OBSERVER_SQL = `CREATE TABLE GOME_LOG_OBSERVER (
 	"oid" VARCHAR(100) NOT NULL,
-	"observer" VARCHAR(378) NOT NULL);`
+	"observer" VARCHAR(378) NOT NULL,
+	UNIQUE ("oid", "observer"));`
 
 const CREATE_LE_STASH_SQL = `CREATE TABLE GOME_STASH (
 	"sid" VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -48,11 +52,11 @@ const CREATE_LE_PK = `CREATE UNIQUE INDEX log_pk ON GOME_LOG("oid", "seq", "bran
 
 const CREATE_LE_OBSERVER_PK = `CREATE UNIQUE INDEX log_obs_pk ON GOME_LOG_OBSERVER("oid", "observer");`
 
-const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" ASC;`
+const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" ASC;`
 
-const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "batch" ASC;`
+const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "batch" ASC;`
 
-const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" DESC LIMIT 1;`
+const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" DESC LIMIT 1;`
 
 const QUERY_LE_OBSERVERS = `SELECT "observer" FROM GOME_LOG_OBSERVER WHERE "oid" = ?;`
 
@@ -142,7 +146,7 @@ func InsertLogEntry(le *model.LogEntry) bool {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	_, err = statement.Exec(le.Origin, le.Oid, le.Seq, le.Data, le.Hash, le.OriginTs, le.Ts, le.Branch, le.PreviousBranch)
+	_, err = statement.Exec(le.Origin, le.Oid, le.Seq, le.Data, le.Hash, le.OriginTs, le.Ts, le.Branch, le.PreviousBranch, le.EntityType, le.ContentType)
 	if err != nil {
 		log.Fatal(err.Error())
 		return false
@@ -164,7 +168,7 @@ func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
 	for row.Next() {
 		le := model.LogEntry{}
 		log.Printf("Scanning next record ")
-		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
 		log.Printf("...found %s\n", le.Oid)
 
 		logEntries = append(logEntries, le)
@@ -184,7 +188,7 @@ func FetchLatestLogEntry(ref string, branch int64) *model.LogEntry {
 
 	for row.Next() {
 		log.Printf("Scanning next record ")
-		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
 		log.Printf("...found %s\n", le.Oid)
 		break
 	}
@@ -262,7 +266,7 @@ func LoadAllLogEntries(ref string, branch uint64) []model.LogEntry {
 	for row.Next() {
 		log.Printf("Scanning next record\n")
 		le := model.LogEntry{}
-		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch)
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
 		logs = append(logs, le)
 	}
 	model.Sort(logs)

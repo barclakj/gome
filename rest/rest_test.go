@@ -13,7 +13,7 @@ func TestRest(t *testing.T) {
 
 	ctrl := ctrl.LogEntryController{}
 
-	le := ctrl.Save([]byte("version 1"))
+	le := ctrl.Save("TEST", "application/octetstream", []byte("version 1"))
 	log.Printf("ID: %s %d", le.Oid, le.Branch)
 
 	log.Printf("Data: %s", string(le.Data))

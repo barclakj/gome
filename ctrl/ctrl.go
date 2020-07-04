@@ -20,6 +20,8 @@ const CMD_PORT = ":7456"
 const CMD_ADDRESS = "0.0.0.0" + CMD_PORT
 const CMD_GATEWAY = "192.168.86.255" + CMD_PORT
 const MAX_WAIT_SECONDS = 1
+const CMD_ENTITY_TYPE = "__CMD"
+const CMD_CONTENT_TYPE = "application/json"
 
 type LogEntryController struct {
 	Alive bool
@@ -66,16 +68,16 @@ func (ctrl *LogEntryController) Fetch(oid string, branch int64) *model.LogEntry 
 }
 
 /* Saves a new log entry with provided data. This is for use locally only (within the server) */
-func (ctrl *LogEntryController) Save(data []byte) *model.LogEntry {
+func (ctrl *LogEntryController) Save(entityType string, contentType string, data []byte) *model.LogEntry {
 	origin := env.GetOrigin()
-	le := model.NewLogEntry(data, origin)
+	le := model.NewLogEntry(entityType, contentType, data, origin)
 	le.Hash = model.Hash(le.Oid, "", le.Data)
 	le = ctrl.insert(le)
 	return le
 }
 
 /* Updates (appends) to an existing log entry with provided data. This is for use locally only (within the server) */
-func (ctrl *LogEntryController) Update(oid string, branch int64, data []byte) *model.LogEntry {
+func (ctrl *LogEntryController) Update(oid string, branch int64, entityType string, contentType string, data []byte) *model.LogEntry {
 	currentLogEntry := db.FetchLatestLogEntry(oid, branch)
 	if currentLogEntry != nil {
 		currentLogEntry.Origin = env.GetOrigin()
@@ -84,9 +86,11 @@ func (ctrl *LogEntryController) Update(oid string, branch int64, data []byte) *m
 		currentLogEntry.Seq = currentLogEntry.Seq + 1
 		currentLogEntry.Ts = time.Now().UnixNano()
 		currentLogEntry.OriginTs = time.Now().UnixNano()
+		currentLogEntry.EntityType = entityType
+		currentLogEntry.ContentType = contentType
 		currentLogEntry = ctrl.insert(currentLogEntry)
 	} else {
-		currentLogEntry = ctrl.Save(data)
+		currentLogEntry = ctrl.Save(entityType, contentType, data)
 	}
 	return currentLogEntry
 }
@@ -107,7 +111,7 @@ func (ctrl *LogEntryController) processStashedLogEntries(oid string, seq uint64)
 func (ctrl *LogEntryController) raiseObserveCommand(oid string, address string) {
 	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.OBSERVE_COMMAND}
 
-	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
 	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
 }
@@ -115,7 +119,7 @@ func (ctrl *LogEntryController) raiseObserveCommand(oid string, address string) 
 func (ctrl *LogEntryController) raiseIgnoreCommand(oid string, address string) {
 	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.IGNORE_COMMAND}
 
-	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
 	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
 }
@@ -123,7 +127,7 @@ func (ctrl *LogEntryController) raiseIgnoreCommand(oid string, address string) {
 func (ctrl *LogEntryController) raiseReplayCommand(oid string, branch int64, address string) {
 	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.REPLAY_COMMAND}
 
-	le := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
 	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
 }
@@ -133,7 +137,7 @@ func (ctrl *LogEntryController) raiseSyncCommand(oid string, branch int64, addre
 
 	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.SYNC_COMMAND, Hash: le.Hash}
 
-	cmdLe := model.NewLogEntry([]byte(command.ToJSON()), env.GetOrigin())
+	cmdLe := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	cmdLe.Oid = model.CMD_OID
 	broadcast.Send(cmdLe, []string{CMD_GATEWAY, address + CMD_PORT})
 }

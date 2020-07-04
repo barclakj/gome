@@ -11,13 +11,13 @@ import (
 
 func TestTen(t *testing.T) {
 	for i := 1; i < 10; i++ {
-		le := model.NewLogEntry([]byte("simple test"), "origin")
+		le := model.NewLogEntry("TEST", "application/octetstream", []byte("simple test"), "origin")
 		InsertLogEntry(le)
 	}
 }
 
 func TestTenUpdates(t *testing.T) {
-	le := model.NewLogEntry([]byte("simple test"), "origin")
+	le := model.NewLogEntry("TEST", "application/octetstream", []byte("simple test"), "origin")
 	InsertLogEntry(le)
 	for i := 1; i < 10; i++ {
 		le.Seq = le.Seq + 1
@@ -32,7 +32,7 @@ func TestTenUpdates(t *testing.T) {
 
 func perfTest(num int) string {
 	started := time.Now().UnixNano()
-	le := model.NewLogEntry([]byte("simple test"), "origin")
+	le := model.NewLogEntry("TEST", "application/octetstream", []byte("simple test"), "origin")
 	InsertLogEntry(le)
 	for i := 1; i < num; i++ {
 		le.Seq = le.Seq + 1
@@ -71,7 +71,7 @@ func TestPerf(t *testing.T) {
 }
 
 func TestInsertObserver(t *testing.T) {
-	le := model.NewLogEntry([]byte("simple test"), "origin")
+	le := model.NewLogEntry("TEST", "application/octetstream", []byte("simple test"), "origin")
 
 	log.Printf("Adding 1st observer for %s", le.Oid)
 	assert.Equal(t, true, AddObserver(le.Oid, "192.168.86.1:7645"))

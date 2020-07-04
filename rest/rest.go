@@ -17,7 +17,10 @@ func returnSingleArticle(w http.ResponseWriter, r *http.Request) {
 
 	le := ctrl.Fetch(key, 0)
 
-	fmt.Fprintf(w, "Key: "+le.ToJSON())
+	if le != nil {
+		w.Header().Add("Content-Type", "application/json")
+		fmt.Fprintf(w, le.ToJSON())
+	}
 }
 
 func handleRequests() {

@@ -9,21 +9,21 @@ import (
 
 func TestValidate(t *testing.T) {
 	data := []byte("This is a simple test...")
-	le := NewLogEntry(data, "")
+	le := NewLogEntry("TEST", "application/octetstream", data, "")
 	assert.Equal(t, false, le.Validate())
-	le = NewLogEntry([]byte(""), "test")
+	le = NewLogEntry("TEST", "application/octetstream", []byte(""), "test")
 	assert.Equal(t, false, le.Validate())
-	le = NewLogEntry(data, "test")
+	le = NewLogEntry("TEST", "application/octetstream", data, "test")
 	le.Oid = ""
 	assert.Equal(t, false, le.Validate())
-	le = NewLogEntry(data, "test")
+	le = NewLogEntry("TEST", "application/octetstream", data, "test")
 	assert.Equal(t, true, le.Validate())
 
-	le = NewLogEntry(data, "test")
+	le = NewLogEntry("TEST", "application/octetstream", data, "test")
 	le.Seq = 0
 	assert.Equal(t, false, le.Validate())
 
-	le = NewLogEntry(data, "test")
+	le = NewLogEntry("TEST", "application/octetstream", data, "test")
 	le.Branch = -1
 	assert.Equal(t, false, le.Validate())
 }
@@ -31,13 +31,13 @@ func TestValidate(t *testing.T) {
 func TestCreateLE(t *testing.T) {
 	data := []byte("This is a simple test...")
 	log.Printf("Testing Create LE!\n")
-	le := NewLogEntry(data, "origin")
+	le := NewLogEntry("TEST", "application/octetstream", data, "origin")
 	assert.Equal(t, uint64(1), le.Seq)
 }
 
 func TestLEJSON(t *testing.T) {
 	log.Printf("Testing JSON serialization/deserialization\n")
-	le := NewLogEntry([]byte("Test"), "origin")
+	le := NewLogEntry("TEST", "application/octetstream", []byte("Test"), "origin")
 	jsonString := le.ToJSON()
 	log.Printf(jsonString)
 

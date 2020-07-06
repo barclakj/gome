@@ -54,7 +54,9 @@ const CREATE_LE_OBSERVER_PK = `CREATE UNIQUE INDEX log_obs_pk ON GOME_LOG_OBSERV
 
 const QUERY_LE_BY_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" ASC;`
 
-const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "batch" ASC;`
+const QUERY_LE_BY_OID_AND_BRANCH = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" ASC;`
+
+const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "branch" ASC;`
 
 const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" DESC LIMIT 1;`
 
@@ -155,7 +157,7 @@ func InsertLogEntry(le *model.LogEntry) bool {
 	}
 }
 
-func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
+func FetchLogEntriesbySeq(ref string, seq uint64, f func(*model.LogEntry)) {
 	openDB()
 	row, err := database.Query(QUERY_LE_BY_OID_AND_SEQ, ref, seq)
 	if err != nil {
@@ -163,7 +165,25 @@ func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
 	}
 	defer row.Close()
 
-	var logEntries []model.LogEntry
+	for row.Next() {
+		le := model.LogEntry{}
+		log.Printf("Scanning next record ")
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
+		log.Printf("...found %s\n", le.Oid)
+
+		if f != nil {
+			f(&le)
+		}
+	}
+}
+
+func FetchBranchLogEntries(ref string, branch int64, f func(*model.LogEntry)) {
+	openDB()
+	row, err := database.Query(QUERY_LE_BY_OID_AND_BRANCH, ref, branch)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
 
 	for row.Next() {
 		le := model.LogEntry{}
@@ -171,9 +191,10 @@ func FetchLogEntries(ref string, seq uint64) []model.LogEntry {
 		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
 		log.Printf("...found %s\n", le.Oid)
 
-		logEntries = append(logEntries, le)
+		if f != nil {
+			f(&le)
+		}
 	}
-	return logEntries
 }
 
 func FetchLatestLogEntry(ref string, branch int64) *model.LogEntry {
@@ -187,14 +208,13 @@ func FetchLatestLogEntry(ref string, branch int64) *model.LogEntry {
 	le := model.LogEntry{}
 
 	for row.Next() {
-		log.Printf("Scanning next record ")
+		// log.Printf("Scanning next record ")
 		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
-		log.Printf("...found %s\n", le.Oid)
+		// log.Printf("...found %s\n", le.Oid)
 		break
 	}
 	if le.Oid == "" {
-		var none *model.LogEntry
-		return none
+		return nil
 	} else {
 		return &le
 	}
@@ -288,6 +308,7 @@ func LoadAllObservers(ref string) model.LogEntryObservers {
 		log.Printf("Observer...\n")
 		var obs string
 		row.Scan(&obs)
+		log.Printf("Observer: %s", obs)
 		observers.Observers = append(observers.Observers, obs)
 	}
 	return observers

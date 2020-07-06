@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,10 +28,13 @@ type LogEntryController struct {
 	Alive bool
 }
 
+var ctrlWg *sync.WaitGroup
+
 /* Initializer/constructor */
 func (ctrl *LogEntryController) Init(wg *sync.WaitGroup) {
 	ctrl.Alive = true
-	go ctrl.listen(wg)
+	ctrlWg = wg
+	go ctrl.listen(ctrlWg)
 	time.Sleep(2 * time.Second)
 }
 
@@ -42,7 +46,7 @@ func (ctrl *LogEntryController) notifyInterestedParties(le *model.LogEntry) {
 	observers = append(observers, registeredObservers.Observers...)
 	log.Printf("Raising notification for %d observers on object %s\n", len(observers), le.Oid)
 
-	broadcast.Send(le, observers)
+	broadcast.Send(le, observers, ctrlWg)
 }
 
 /* Inserts a new log entry. Note that a log entry is immutable so this appends a new version to the list of entries. */
@@ -115,38 +119,41 @@ func (ctrl *LogEntryController) processStashedLogEntries(oid string, seq uint64)
 	return ultLe
 }
 
-func (ctrl *LogEntryController) raiseObserveCommand(oid string, address string) {
+func (ctrl *LogEntryController) RaiseObserveCommand(oid string, address string) {
 	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.OBSERVE_COMMAND}
 
 	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
-	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT}, ctrlWg)
 }
 
-func (ctrl *LogEntryController) raiseIgnoreCommand(oid string, address string) {
+func (ctrl *LogEntryController) RaiseIgnoreCommand(oid string, address string) {
 	command := model.LogEntryCommand{Oid: oid, Origin: env.GetOrigin(), Command: model.IGNORE_COMMAND}
 
 	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
-	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT}, ctrlWg)
 }
 
-func (ctrl *LogEntryController) raiseReplayCommand(oid string, branch int64, address string) {
+func (ctrl *LogEntryController) RequestReplay(oid string, branch int64) {
+	observers := db.LoadAllObservers(oid)
+	log.Printf("Raising replay request for %d observers on object %s\n", len(observers.Observers), oid)
+
 	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.REPLAY_COMMAND}
 
 	le := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	le.Oid = model.CMD_OID
-	broadcast.Send(le, []string{CMD_GATEWAY, address + CMD_PORT})
+	broadcast.Send(le, observers.Observers, ctrlWg)
 }
 
-func (ctrl *LogEntryController) raiseSyncCommand(oid string, branch int64, address string) {
+func (ctrl *LogEntryController) RaiseSyncCommand(oid string, branch int64, address string) {
 	le := db.FetchLatestLogEntry(oid, branch)
 
 	command := model.LogEntryCommand{Oid: oid, Branch: branch, Origin: env.GetOrigin(), Command: model.SYNC_COMMAND, Hash: le.Hash}
 
 	cmdLe := model.NewLogEntry(CMD_ENTITY_TYPE, CMD_CONTENT_TYPE, []byte(command.ToJSON()), env.GetOrigin())
 	cmdLe.Oid = model.CMD_OID
-	broadcast.Send(cmdLe, []string{CMD_GATEWAY, address + CMD_PORT})
+	broadcast.Send(cmdLe, []string{CMD_GATEWAY, address + CMD_PORT}, ctrlWg)
 }
 
 func (ctrl *LogEntryController) handleCommand(cmd []byte) {
@@ -154,11 +161,20 @@ func (ctrl *LogEntryController) handleCommand(cmd []byte) {
 
 	switch command.Command {
 	case model.OBSERVE_COMMAND:
+		log.Printf("Handling OBSERVE command...")
 		db.AddObserver(command.Oid, command.Origin)
 		break
 	case model.IGNORE_COMMAND:
+		log.Printf("Handling IGNORE command...")
 		db.RemoveObserver(command.Oid, command.Origin)
 		break
+	case model.REPLAY_COMMAND:
+		log.Printf("Handling REPLAY command...")
+		originHost := env.GetHostnameFromOrigin(command.Origin)
+		log.Printf("Will send messages back to: %s", originHost)
+		db.FetchBranchLogEntries(command.Oid, command.Branch, func(le *model.LogEntry) {
+			broadcast.Send(le, []string{originHost}, ctrlWg)
+		})
 	default:
 		log.Printf("Unknown command recieved %s on %s from %s", command.Command, command.Oid, command.Origin)
 	}
@@ -195,9 +211,12 @@ func (ctrl *LogEntryController) FromRemote(le *model.LogEntry) *model.LogEntry {
 				log.Printf("%s tried to create a duplicate log for %s!? REJECTING!", le.Origin, le.Oid)
 			}
 		} else {
-			currentLogEntries := db.FetchLogEntries(le.Oid, le.Seq-1) // find those which this one should be based on
+			var logEntries []*model.LogEntry
+			db.FetchLogEntriesbySeq(le.Oid, le.Seq-1, func(nextLe *model.LogEntry) {
+				logEntries = append(logEntries, nextLe)
+			})
 
-			for _, currentLogEntry := range currentLogEntries {
+			for _, currentLogEntry := range logEntries {
 				newHash := model.Hash(currentLogEntry.Oid, currentLogEntry.Hash, le.Data)
 				log.Printf("Testing hash: %s = %s ?", le.Hash, newHash)
 				if le.Hash == newHash { // we've found a branch
@@ -217,7 +236,8 @@ func (ctrl *LogEntryController) FromRemote(le *model.LogEntry) *model.LogEntry {
 					done = true
 					break
 				}
-			}
+			} // find those which this one should be based on
+
 			// if I've not saved it then it's not based on anything I know about...
 			// this could be because its based on another branch from something else..
 			// stash the message as out of order and reprocess later...
@@ -248,7 +268,7 @@ func (ctrl *LogEntryController) listen(wg *sync.WaitGroup) {
 	sock, _ := net.ListenUDP("udp", addr)
 	if sock != nil {
 		defer sock.Close()
-		log.Printf("Listening on %s\n", addr)
+		log.Printf("UDP comms listening on %s\n", addr)
 
 		i := 0
 		buf := make([]byte, MAX_MSG_SIZE)
@@ -257,7 +277,9 @@ func (ctrl *LogEntryController) listen(wg *sync.WaitGroup) {
 			rlen, remoAddr, err := sock.ReadFromUDP(buf)
 			i += rlen
 			if err != nil {
-				fmt.Println(err)
+				if !strings.Contains(string(err.Error()), "i/o timeout") {
+					fmt.Println(err)
+				}
 			} else {
 				if !env.IsLocalAddress(remoAddr.IP.String()) {
 					le := model.FromJSON(buf[0:rlen])

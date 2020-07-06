@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sync"
 
 	"realizr.io/gome/model"
 
@@ -20,8 +21,9 @@ const X_GOME_TYPE = "X_GOME_TYPE"
 const X_GOME_ID = "X_GOME_ID"
 const X_GOME_SEQ = "X_GOME_SEQ"
 const DEFAULT_CONTENT_TYPE = "application/octetstream"
+const REST_PORT = ":17456"
 
-var controller ctrl.LogEntryController
+var controller *ctrl.LogEntryController
 
 // Returns the int batch number if provided in request or default value if not.
 func getRequestBatch(r *http.Request) int64 {
@@ -68,7 +70,7 @@ func createArticle(w http.ResponseWriter, r *http.Request) {
 
 	if le == nil {
 		log.Fatalf("Failed to save document... ")
-
+		w.WriteHeader(http.StatusBadRequest)
 	} else {
 		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
 		w.Header().Add(X_GOME_SEQ, strconv.FormatUint(le.Seq, 10))
@@ -92,7 +94,7 @@ func updateArticle(w http.ResponseWriter, r *http.Request) {
 
 	if le == nil {
 		log.Fatalf("Failed to updated document (id, branch, hash): %s %d %s", oid, branch, hash)
-
+		w.WriteHeader(http.StatusBadRequest)
 	} else {
 		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
 		w.Header().Add(X_GOME_SEQ, strconv.FormatUint(le.Seq, 10))
@@ -104,7 +106,6 @@ func updateArticle(w http.ResponseWriter, r *http.Request) {
 }
 
 func fetchArticle(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Fetching document...")
 	vars := mux.Vars(r)
 	key := vars["oid"]
 	branch := getRequestBatch(r)
@@ -115,6 +116,7 @@ func fetchArticle(w http.ResponseWriter, r *http.Request) {
 		//log.Printf("Content-Length %s", strconv.Itoa(len(le.Data)))
 		//log.Printf("%s %s", X_GOME_BRANCH, string(le.Branch))
 		//log.Printf("%s %s", X_GOME_HASH, le.Hash)
+		log.Printf("Serving document %s %d", key, branch)
 		w.Header().Add("Content-Type", le.ContentType)
 		w.Header().Add("Content-Length", strconv.FormatInt(int64(len(le.Data)), 10))
 		w.Header().Add(X_GOME_BRANCH, strconv.FormatInt(le.Branch, 10))
@@ -124,31 +126,46 @@ func fetchArticle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add(X_GOME_ID, le.Oid)
 		w.WriteHeader(http.StatusOK)
 		w.Write(le.Data)
+	} else {
+		log.Printf("Document not found %s %d", key, branch)
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
-func handleRequests() {
+func fetchFavicon(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func handleRequests(wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	log.Printf("Webserver listening on %s", REST_PORT)
+
 	// creates a new instance of a mux router
 	myRouter := mux.NewRouter().StrictSlash(true)
 	// replace http.HandleFunc with myRouter.HandleFunc
 	// 	myRouter.HandleFunc("/", homePage)
 	//	myRouter.HandleFunc("/logs", returnAllArticles)
 	myRouter.HandleFunc("/log/{oid}", fetchArticle).Methods("GET")
-	myRouter.HandleFunc("/log", createArticle).Methods("POST")
+	myRouter.HandleFunc("/log/", createArticle).Methods("POST")
 	myRouter.HandleFunc("/log/{oid}", updateArticle).Methods("PUT")
+	myRouter.HandleFunc("/favicon.ico", fetchFavicon).Methods("GET")
 
 	// finally, instead of passing in nil, we want
 	// to pass in our newly created router as the second
 	// argument
-	http.ListenAndServe(":17456", myRouter)
+	http.ListenAndServe(REST_PORT, myRouter)
 }
 
 func getLogEntryByOid(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, r.RequestURI)
 }
 
-func StartWebServer() {
-	handleRequests()
+func StartWebServer(ctrlr *ctrl.LogEntryController, wg *sync.WaitGroup) {
+	controller = ctrlr
+
+	go handleRequests(wg)
 	//	http.HandleFunc("/", getLogEntryByOid)
 	//	http.ListenAndServe("127.0.0.1:8880", nil)
 }

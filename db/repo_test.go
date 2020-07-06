@@ -16,6 +16,11 @@ func TestTen(t *testing.T) {
 	}
 }
 
+func TestNotFound(t *testing.T) {
+	le := FetchLatestLogEntry("urn:uuid:THIDOESNTEXIST", model.DEFAULT_BRANCH)
+	assert.True(t, le == nil)
+}
+
 func TestTenUpdates(t *testing.T) {
 	le := model.NewLogEntry("TEST", "application/octetstream", []byte("simple test"), "origin")
 	InsertLogEntry(le)
@@ -28,6 +33,10 @@ func TestTenUpdates(t *testing.T) {
 	log.Printf("Found object %s with latest seq %d \n", le2.Oid, le2.Seq)
 	assert.Equal(t, le2.Seq, uint64(10))
 	assert.Equal(t, le2.Oid, le.Oid)
+
+	FetchBranchLogEntries(le.Oid, le.Branch, func(le *model.LogEntry) {
+		log.Printf("Next %s %d %d", le.Oid, le.Branch, le.Seq)
+	})
 }
 
 func perfTest(num int) string {

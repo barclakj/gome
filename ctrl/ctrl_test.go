@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"realizr.io/gome/db"
+	"realizr.io/gome/env"
 	"realizr.io/gome/model"
 
 	"github.com/stretchr/testify/assert"
@@ -25,7 +27,7 @@ func TestSaveNewLE(t *testing.T) {
 	if le != nil {
 		assert.Equal(t, uint64(1), le.Seq)
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	ctrl.Alive = false
 	wg.Wait()
 }
@@ -51,7 +53,7 @@ func TestUpdateLE(t *testing.T) {
 		assert.Equal(t, uint64(3), le.Seq)
 
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	ctrl.Alive = false
 	wg.Wait()
 }
@@ -132,7 +134,7 @@ func TestLETree(t *testing.T) {
 	assert.Equal(t, le3.Branch, le4.PreviousBranch)
 	assert.Equal(t, le.Branch, le2.PreviousBranch)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	ctrl.Alive = false
 	wg.Wait()
 }
@@ -177,7 +179,7 @@ func TestLEStash(t *testing.T) {
 		assert.Equal(t, true, false)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	ctrl.Alive = false
 	wg.Wait()
 }
@@ -200,7 +202,7 @@ func TestLEDuplicate(t *testing.T) {
 	assert.NotEqual(t, nile, ctrl.FromRemote(le)) // should save ok
 	assert.Equal(t, nile, ctrl.FromRemote(le))    // should ignore
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	ctrl.Alive = false
 	wg.Wait()
 }
@@ -218,7 +220,27 @@ func TestLENewRemote(t *testing.T) {
 
 	assert.NotEqual(t, nile, ctrl.FromRemote(le)) // should save ok
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
+	ctrl.Alive = false
+	wg.Wait()
+}
+
+func TestCMDReplay(t *testing.T) {
+	log.Printf("Testing REPLAY COMMAND\n")
+	ctrl := LogEntryController{}
+	ctrl.Init(&wg)
+
+	le := ctrl.Save("TEST", "application/octetstream", []byte("version 1"))
+	db.AddObserver(le.Oid, "127.0.0.1:7456")
+	for i := 0; i < 10; i++ {
+		le = ctrl.Update(le.Oid, le.Branch, le.Hash, []byte("new"))
+	}
+	env.AllowLocal = true
+
+	ctrl.RequestReplay(le.Oid, le.Branch)
+
+	time.Sleep(1 * time.Second)
+	env.AllowLocal = false
 	ctrl.Alive = false
 	wg.Wait()
 }

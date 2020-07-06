@@ -10,6 +10,21 @@ import (
 	"strings"
 )
 
+var AllowLocal bool = false
+
+func GetHostnameFromOrigin(origin string) string {
+	if strings.Contains(origin, "@") {
+		ogn := origin[strings.Index(origin, "@")+1:]
+		if strings.Contains(ogn, ":") {
+			return ogn
+		} else {
+			return ogn + ":7456"
+		}
+	} else {
+		return ""
+	}
+}
+
 /* Returns the origin in form <user>@<host> */
 func GetOrigin() string {
 	return GetUser() + "@" + GetHostname()
@@ -62,30 +77,34 @@ func GetHostname() string {
 
 /* Checks if the specified address if local (true) or not (false) */
 func IsLocalAddress(testIP string) bool {
-	local := false
-	ifaces, _ := net.Interfaces()
-	// handle err
-	for _, i := range ifaces {
-		addrs, _ := i.Addrs()
+	if AllowLocal {
+		return false
+	} else {
+		local := false
+		ifaces, _ := net.Interfaces()
 		// handle err
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
+		for _, i := range ifaces {
+			addrs, _ := i.Addrs()
+			// handle err
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip.String() == testIP {
+					log.Printf("Local IP...")
+					local = true
+					break
+				}
+				// process IP address
 			}
-			if ip.String() == testIP {
-				log.Printf("Local IP...")
-				local = true
+			if local == true {
 				break
 			}
-			// process IP address
 		}
-		if local == true {
-			break
-		}
+		return local
 	}
-	return local
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,10 +15,13 @@ import (
 	"realizr.io/gome/ctrl"
 )
 
+var wg sync.WaitGroup
+
 func TestRestGET(t *testing.T) {
 	log.Printf("Starting webserver...")
 
 	ctrl := ctrl.LogEntryController{}
+	ctrl.Init(&wg)
 
 	le := ctrl.Save("TEST", "application/octetstream", []byte("version 1"))
 
@@ -28,7 +32,7 @@ func TestRestGET(t *testing.T) {
 
 	log.Printf("Data: %s", string(le.Data))
 
-	go StartWebServer()
+	go StartWebServer(&ctrl, &wg)
 	log.Printf("Webserver running...")
 	time.Sleep(1 * time.Second)
 
@@ -56,6 +60,7 @@ func TestRestPut(t *testing.T) {
 	log.Printf("Starting webserver...")
 
 	ctrl := ctrl.LogEntryController{}
+	ctrl.Init(&wg)
 
 	le := ctrl.Save("TEST", "application/octetstream", []byte("version 1"))
 

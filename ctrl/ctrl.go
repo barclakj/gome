@@ -161,11 +161,11 @@ func (ctrl *LogEntryController) handleCommand(cmd []byte) {
 
 	switch command.Command {
 	case model.OBSERVE_COMMAND:
-		log.Printf("Handling OBSERVE command...")
+		log.Printf("Handling ADD OBSERVER command...")
 		db.AddObserver(command.Oid, command.Origin)
 		break
 	case model.IGNORE_COMMAND:
-		log.Printf("Handling IGNORE command...")
+		log.Printf("Handling IGNORE OBSERVER command...")
 		db.RemoveObserver(command.Oid, command.Origin)
 		break
 	case model.REPLAY_COMMAND:

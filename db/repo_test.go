@@ -69,10 +69,10 @@ func perfTestFetch(oid string) {
 
 func TestPerf(t *testing.T) {
 	perfTest(100)
-	perfTest(200)
+	oid := perfTest(200)
 	// perfTest(300)
 	// perfTest(400)
-	oid := perfTest(500)
+	// oid := perfTest(500)
 
 	for i := 1; i < 10; i++ {
 		perfTestFetch(oid)
@@ -105,4 +105,13 @@ func TestInsertObserver(t *testing.T) {
 
 	log.Printf("Checking assertions from REload for %s", le.Oid)
 	assert.Equal(t, len(observers.Observers), 1)
+}
+
+func TestListEntitiesByType(t *testing.T) {
+	log.Printf("TestListEntitiesByType...")
+	ListEntitiesByType("TEST", func(s string) {
+		log.Printf(s)
+		le := FetchLatestLogEntryUpdated(s)
+		log.Printf("%s => %s", s, le.ToJSON())
+	})
 }

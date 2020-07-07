@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"sync"
 
+	"realizr.io/gome/db"
 	"realizr.io/gome/model"
 
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"realizr.io/gome/ctrl"
 )
 
@@ -21,6 +23,7 @@ const X_GOME_TYPE = "X_GOME_TYPE"
 const X_GOME_ID = "X_GOME_ID"
 const X_GOME_SEQ = "X_GOME_SEQ"
 const DEFAULT_CONTENT_TYPE = "application/octetstream"
+const JSON_CONTENT_TYPE = "application/json"
 const REST_PORT = ":17456"
 
 var controller *ctrl.LogEntryController
@@ -132,6 +135,34 @@ func fetchArticle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func fetchArticlesByType(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	entityType := vars["type"]
+
+	if entityType != "" {
+		w.Header().Add(X_GOME_TYPE, entityType)
+		w.Header().Add("Content-Type", JSON_CONTENT_TYPE)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("[\n"))
+		hasPrior := false
+		db.ListEntitiesByType(entityType, func(uuid string) {
+			le := db.FetchLatestLogEntryUpdated(uuid)
+			if le != nil {
+				if hasPrior {
+					w.Write([]byte(",\n"))
+				} else {
+					hasPrior = true
+				}
+				w.Write([]byte(le.ToJSON()))
+			}
+		})
+		w.Write([]byte("]"))
+	} else {
+		log.Printf("No entity type specified!")
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
 func fetchFavicon(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
@@ -147,6 +178,7 @@ func handleRequests(wg *sync.WaitGroup) {
 	// replace http.HandleFunc with myRouter.HandleFunc
 	// 	myRouter.HandleFunc("/", homePage)
 	//	myRouter.HandleFunc("/logs", returnAllArticles)
+	myRouter.HandleFunc("/logs/{type}", fetchArticlesByType).Methods("GET")
 	myRouter.HandleFunc("/log/{oid}", fetchArticle).Methods("GET")
 	myRouter.HandleFunc("/log/", createArticle).Methods("POST")
 	myRouter.HandleFunc("/log/{oid}", updateArticle).Methods("PUT")
@@ -155,6 +187,7 @@ func handleRequests(wg *sync.WaitGroup) {
 	// finally, instead of passing in nil, we want
 	// to pass in our newly created router as the second
 	// argument
+	myRouter.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(REST_PORT, myRouter)
 }
 

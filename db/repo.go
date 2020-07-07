@@ -2,6 +2,7 @@ package db
 
 import (
 	"log"
+	"time"
 
 	"realizr.io/gome/env"
 
@@ -59,6 +60,10 @@ const QUERY_LE_BY_OID_AND_BRANCH = `SELECT "origin", "oid", "seq", "data", "hash
 const QUERY_LE_BY_OID_AND_SEQ = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "seq" = ? ORDER BY "branch" ASC;`
 
 const QUERY_LE_BY_LATEST_OID = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? AND "branch" = ? ORDER BY "seq" DESC LIMIT 1;`
+
+const QUERY_LE_BY_LATEST_TS = `SELECT "origin", "oid", "seq", "data", "hash", "origin_ts", "ts", "branch", "previous_branch", "entity_type", "content_type" FROM GOME_LOG WHERE "oid" = ? ORDER BY "origin_ts" DESC LIMIT 1;`
+
+const LIST_LE_BY_TYPE = `SELECT DISTINCT("oid") FROM GOME_LOG WHERE "entity_type" = ? ORDER by "seq" DESC;`
 
 const QUERY_LE_OBSERVERS = `SELECT "observer" FROM GOME_LOG_OBSERVER WHERE "oid" = ?;`
 
@@ -137,6 +142,8 @@ func openDB() {
 			createDB()
 		}
 		db, _ := sql.Open("sqlite3", filename)
+		db.SetMaxOpenConns(10)
+		db.SetConnMaxLifetime(30 * time.Minute)
 
 		database = db
 	}
@@ -177,6 +184,23 @@ func FetchLogEntriesbySeq(ref string, seq uint64, f func(*model.LogEntry)) {
 	}
 }
 
+func ListEntitiesByType(entityType string, f func(string)) {
+	openDB()
+	row, err := database.Query(LIST_LE_BY_TYPE, entityType)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+
+	for row.Next() {
+		var s string
+		row.Scan(&s)
+		if f != nil {
+			f(s)
+		}
+	}
+}
+
 func FetchBranchLogEntries(ref string, branch int64, f func(*model.LogEntry)) {
 	openDB()
 	row, err := database.Query(QUERY_LE_BY_OID_AND_BRANCH, ref, branch)
@@ -194,6 +218,29 @@ func FetchBranchLogEntries(ref string, branch int64, f func(*model.LogEntry)) {
 		if f != nil {
 			f(&le)
 		}
+	}
+}
+
+func FetchLatestLogEntryUpdated(ref string) *model.LogEntry {
+	openDB()
+	row, err := database.Query(QUERY_LE_BY_LATEST_TS, ref)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer row.Close()
+
+	le := model.LogEntry{}
+
+	for row.Next() {
+		// log.Printf("Scanning next record ")
+		row.Scan(&le.Origin, &le.Oid, &le.Seq, &le.Data, &le.Hash, &le.OriginTs, &le.Ts, &le.Branch, &le.PreviousBranch, &le.EntityType, &le.ContentType)
+		// log.Printf("...found %s\n", le.Oid)
+		break
+	}
+	if le.Oid == "" {
+		return nil
+	} else {
+		return &le
 	}
 }
 

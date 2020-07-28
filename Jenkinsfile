@@ -12,7 +12,7 @@ pipeline {
                     withEnv(["GOROOT=${root}", "PATH+GO=${root}/bin"]) {
                         sh 'go version'
                         sh 'go test realizr.io/gome/... --cover'
-                        sh 'go build'
+                        sh 'go build' 
                     }
                 }
             }

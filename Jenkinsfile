@@ -1,6 +1,5 @@
 pipeline {
-    agent any
-
+agent {
 // Run on an agent where we want to use Go
 node {
     // Install the desired Go version
@@ -10,6 +9,7 @@ node {
     withEnv(["GOROOT=${root}", "PATH+GO=${root}/bin"]) {
         sh 'go version'
     }
+}
 }
 
     stages {

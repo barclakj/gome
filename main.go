@@ -9,6 +9,7 @@ import (
 
 var wg sync.WaitGroup
 
+// This is the main function.
 func main() {
 	ctrl := ctrl.LogEntryController{}
 	ctrl.Init(&wg)
